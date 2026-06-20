@@ -1,0 +1,236 @@
+name: Build & Release App
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: # Allows manual runs from the Actions tab
+
+jobs:
+  # ===========================================================================
+  # Job: Build for macOS
+  # ===========================================================================
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.23'
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails v3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build and Package App Bundle
+        run: |
+          # Package creates the .app bundle structure in bin/
+          wails3 task package
+
+      - name: Archive macOS App Bundle
+        run: |
+          cd bin
+          zip -r actions-example-macos-universal.zip actions-example.app
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifact
+          path: bin/actions-example-macos-universal.zip
+
+  # ===========================================================================
+  # Job: Build for Windows
+  # ===========================================================================
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.23'
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails v3 CLI
+        shell: bash
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build Application Binary
+        run: |
+          wails3 build
+
+      - name: Build NSIS Installer
+        run: |
+          # Note: makensis is pre-installed on GitHub windows-latest runners
+          wails3 task package
+
+      - name: List Output Files
+        shell: bash
+        run: |
+          echo "=== bin/ content ==="
+          ls -la bin/ || true
+          echo "=== build/windows/nsis/ content ==="
+          ls -la build/windows/nsis/ || true
+
+      - name: Prepare Windows Release Artifacts
+        shell: bash
+        run: |
+          mkdir -p win-release
+          # Copy raw executable
+          if [ -f bin/actions-example.exe ]; then
+            cp bin/actions-example.exe win-release/actions-example.exe
+          fi
+          # Copy NSIS installer
+          if [ -f build/windows/nsis/actions-example-installer.exe ]; then
+            cp build/windows/nsis/actions-example-installer.exe win-release/actions-example-installer.exe
+          fi
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-artifact
+          path: win-release/*
+
+  # ===========================================================================
+  # Job: Build for Linux
+  # ===========================================================================
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install GTK3 and WebKit2Gtk Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '>=1.23'
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails v3 CLI
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+
+      - name: Install Frontend Dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build Linux Binary
+        run: |
+          wails3 build
+
+      - name: Generate DEB and RPM Packages
+        run: |
+          # Use internal nfpm tool inside Wails v3 to build deb/rpm packages
+          wails3 task generate:deb
+          wails3 task generate:rpm
+
+      - name: Compress Linux Binary
+        run: |
+          cd bin
+          tar -czvf actions-example-linux-amd64.tar.gz actions-example
+
+      - name: Prepare Linux Release Artifacts
+        run: |
+          mkdir -p linux-release
+          # Copy tarball
+          cp bin/actions-example-linux-amd64.tar.gz linux-release/
+          # Copy DEB package (handle wildcards or exact names)
+          cp bin/*.deb linux-release/ || true
+          # Copy RPM package
+          cp bin/*.rpm linux-release/ || true
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifact
+          path: linux-release/*
+
+  # ===========================================================================
+  # Job: Create Draft Release and Upload All Assets
+  # ===========================================================================
+  release:
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Important: allows the action to write and create releases
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Create Work Directory for Assets
+        run: mkdir -p release-assets
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-artifact
+          path: release-assets/
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-artifact
+          path: release-assets/
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-artifact
+          path: release-assets/
+
+      - name: List Downloaded Release Assets
+        run: |
+          echo "=== Compiled Release Assets ==="
+          ls -la release-assets/
+
+      - name: Create GitHub Draft Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: false
+          name: Release ${{ github.ref_name }}
+          tag_name: ${{ github.ref }}
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
