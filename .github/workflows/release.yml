@@ -41,7 +41,11 @@ jobs:
       - name: Install Frontend Dependencies
         run: |
           cd frontend
-          npm ci
+          if [ -d node_modules ]; then
+            echo "node_modules already exists, skipping npm ci."
+          else
+            npm ci
+          fi
 
       - name: Build and Package App Bundle
         run: |
@@ -104,7 +108,11 @@ jobs:
       - name: Install Frontend Dependencies
         run: |
           cd frontend
-          npm ci
+          if [ -d node_modules ]; then
+            echo "node_modules already exists, skipping npm ci."
+          else
+            npm ci
+          fi
 
       - name: Build Application Binary
         run: |
@@ -196,7 +204,11 @@ jobs:
       - name: Install Frontend Dependencies
         run: |
           cd frontend
-          npm ci
+          if [ -d node_modules ]; then
+            echo "node_modules already exists, skipping npm ci."
+          else
+            npm ci
+          fi
 
       - name: Build Linux Binary
         run: |
