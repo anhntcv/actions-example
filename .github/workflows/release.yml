@@ -146,6 +146,7 @@ jobs:
           fi
 
       - name: Install Frontend Dependencies
+        shell: bash
         run: |
           cd frontend
           if [ -d node_modules ]; then
