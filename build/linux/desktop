@@ -1,13 +1,13 @@
 [Desktop Entry]
 Version=1.0
 Name=My Product
-Comment=A actions-example application
+Comment=A act-wails application
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/actions-example %u
+Exec=/usr/local/bin/act-wails %u
 Terminal=false
 Type=Application
-Icon=actions-example
+Icon=act-wails
 Categories=Utility;
-StartupWMClass=actions-example
+StartupWMClass=act-wails
 
  

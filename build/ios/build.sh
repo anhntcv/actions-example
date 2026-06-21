@@ -2,7 +2,7 @@
 set -e
 
 # Build configuration
-APP_NAME="actions-example"
+APP_NAME="act-wails"
 BUNDLE_ID="com.example.actionsexample"
 VERSION="0.1.0"
 BUILD_NUMBER="0.1.0"

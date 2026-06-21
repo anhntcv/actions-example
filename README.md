@@ -1,1 +1,1 @@
-# actions-example
+# act-wails

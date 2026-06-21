@@ -3,7 +3,7 @@ name: Build & Release App
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch: # Allows manual runs from the Actions tab
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '>=1.23'
+          go-version: ">=1.23"
           cache: ${{ !env.ACT }}
 
       - name: Set up Node.js
@@ -51,13 +51,13 @@ jobs:
       - name: Archive macOS App Bundle
         run: |
           cd bin
-          zip -r actions-example-macos-universal.zip actions-example.app
+          zip -r act-wails-macos-universal.zip act-wails.app
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-artifact
-          path: bin/actions-example-macos-universal.zip
+          path: bin/act-wails-macos-universal.zip
 
       - name: Send Telegram Notification
         run: |
@@ -81,7 +81,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '>=1.23'
+          go-version: ">=1.23"
           cache: ${{ !env.ACT }}
 
       - name: Set up Node.js
@@ -132,12 +132,12 @@ jobs:
         run: |
           mkdir -p win-release
           # Copy raw executable
-          if [ -f bin/actions-example.exe ]; then
-            cp bin/actions-example.exe win-release/actions-example.exe
+          if [ -f bin/act-wails.exe ]; then
+            cp bin/act-wails.exe win-release/act-wails.exe
           fi
           # Copy NSIS installer
-          if [ -f build/windows/nsis/actions-example-installer.exe ]; then
-            cp build/windows/nsis/actions-example-installer.exe win-release/actions-example-installer.exe
+          if [ -f build/windows/nsis/act-wails-installer.exe ]; then
+            cp build/windows/nsis/act-wails-installer.exe win-release/act-wails-installer.exe
           fi
 
       - name: Upload Windows Artifacts
@@ -174,7 +174,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '>=1.23'
+          go-version: ">=1.23"
           cache: ${{ !env.ACT }}
 
       - name: Set up Node.js
@@ -200,6 +200,7 @@ jobs:
 
       - name: Build Linux Binary
         run: |
+          export GOMAXPROCS=2
           wails3 build
 
       - name: Generate DEB and RPM Packages
@@ -211,13 +212,13 @@ jobs:
       - name: Compress Linux Binary
         run: |
           cd bin
-          tar -czvf actions-example-linux-amd64.tar.gz actions-example
+          tar -czvf act-wails-linux-amd64.tar.gz act-wails
 
       - name: Prepare Linux Release Artifacts
         run: |
           mkdir -p linux-release
           # Copy tarball
-          cp bin/actions-example-linux-amd64.tar.gz linux-release/
+          cp bin/act-wails-linux-amd64.tar.gz linux-release/
           # Copy DEB package (handle wildcards or exact names)
           cp bin/*.deb linux-release/ || true
           # Copy RPM package

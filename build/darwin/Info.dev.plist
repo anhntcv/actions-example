@@ -6,7 +6,7 @@
         <key>CFBundleName</key>
             <string>My Product</string>
         <key>CFBundleExecutable</key>
-            <string>actions-example</string>
+            <string>act-wails</string>
         <key>CFBundleIdentifier</key>
             <string>com.example.actionsexample</string>
         <key>CFBundleVersion</key>

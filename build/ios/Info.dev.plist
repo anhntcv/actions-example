@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>actions-example</string>
+    <string>act-wails</string>
     <key>CFBundleIdentifier</key>
     <string>com.example.actionsexample.dev</string>
     <key>CFBundleName</key>
