@@ -68,6 +68,12 @@ jobs:
           cache: ${{ !env.ACT && 'npm' || '' }}
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Install GTK4 and WebKitGTK 6.0 Dependencies (for local act/Docker support)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev build-essential pkg-config
+
       - name: Install Wails v3 CLI
         run: |
           if command -v wails3 >/dev/null 2>&1; then
@@ -134,6 +140,13 @@ jobs:
           node-version: 20
           cache: ${{ !env.ACT && 'npm' || '' }}
           cache-dependency-path: frontend/package-lock.json
+
+      - name: Install GTK4 and WebKitGTK 6.0 Dependencies (for local act/Docker support)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev build-essential pkg-config
 
       - name: Install Wails v3 CLI
         shell: bash
