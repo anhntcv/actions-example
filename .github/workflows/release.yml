@@ -4,13 +4,52 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - main
   workflow_dispatch: # Allows manual runs from the Actions tab
 
 jobs:
   # ===========================================================================
+  # Job: Get/Increment Version Tag
+  # ===========================================================================
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get next version tag
+        id: get_version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "Triggered by tag: ${{ github.ref_name }}"
+          else
+            # Fetch tags, ignoring errors if offline or no remote
+            git fetch --tags --force || true
+            latest_tag=$(git tag -l "v1.*" | sort -V | tail -n1)
+            
+            if [ -z "$latest_tag" ]; then
+              next_version="v1.0.0"
+            else
+              IFS='.' read -r major minor patch <<< "${latest_tag#v}"
+              next_patch=$((patch + 1))
+              next_version="v1.0.${next_patch}"
+            fi
+            
+            echo "version=${next_version}" >> $GITHUB_OUTPUT
+            echo "Calculated next version: ${next_version}"
+          fi
+
+  # ===========================================================================
   # Job: Build for macOS
   # ===========================================================================
   build-macos:
+    needs: prepare
     runs-on: macos-latest
     steps:
       - name: Checkout Code
@@ -34,7 +73,7 @@ jobs:
           if command -v wails3 >/dev/null 2>&1; then
             echo "wails3 is already installed, skipping installation."
           else
-            export GOMAXPROCS=2
+            export GOMAXPROCS=1
             go install github.com/wailsapp/wails/v3/cmd/wails3@latest
           fi
 
@@ -68,7 +107,7 @@ jobs:
           if [ -n "${{ secrets.TELEGRAM_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_TO }}" ]; then
             curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
               -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
-              -d "text=✅ macOS build succeeded for version ${{ github.ref_name }}!"
+              -d "text=✅ macOS build succeeded for version ${{ needs.prepare.outputs.version }}!"
           else
             echo "Telegram secrets not configured, skipping notification."
           fi
@@ -77,6 +116,7 @@ jobs:
   # Job: Build for Windows
   # ===========================================================================
   build-windows:
+    needs: prepare
     runs-on: windows-latest
     steps:
       - name: Checkout Code
@@ -101,7 +141,7 @@ jobs:
           if command -v wails3 >/dev/null 2>&1; then
             echo "wails3 is already installed, skipping installation."
           else
-            export GOMAXPROCS=2
+            export GOMAXPROCS=1
             go install github.com/wailsapp/wails/v3/cmd/wails3@latest
           fi
 
@@ -160,7 +200,7 @@ jobs:
           if [ -n "${{ secrets.TELEGRAM_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_TO }}" ]; then
             curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
               -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
-              -d "text=✅ Windows build succeeded for version ${{ github.ref_name }}!"
+              -d "text=✅ Windows build succeeded for version ${{ needs.prepare.outputs.version }}!"
           else
             echo "Telegram secrets not configured, skipping notification."
           fi
@@ -169,6 +209,7 @@ jobs:
   # Job: Build for Linux
   # ===========================================================================
   build-linux:
+    needs: prepare
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Code
@@ -197,7 +238,7 @@ jobs:
           if command -v wails3 >/dev/null 2>&1; then
             echo "wails3 is already installed, skipping installation."
           else
-            export GOMAXPROCS=2
+            export GOMAXPROCS=1
             go install github.com/wailsapp/wails/v3/cmd/wails3@latest
           fi
 
@@ -212,7 +253,7 @@ jobs:
 
       - name: Build Linux Binary
         run: |
-          export GOMAXPROCS=2
+          export GOMAXPROCS=1
           wails3 build
 
       - name: Generate DEB and RPM Packages
@@ -247,7 +288,7 @@ jobs:
           if [ -n "${{ secrets.TELEGRAM_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_TO }}" ]; then
             curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
               -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
-              -d "text=✅ Linux build succeeded for version ${{ github.ref_name }}!"
+              -d "text=✅ Linux build succeeded for version ${{ needs.prepare.outputs.version }}!"
           else
             echo "Telegram secrets not configured, skipping notification."
           fi
@@ -256,7 +297,7 @@ jobs:
   # Job: Create Draft Release and Upload All Assets
   # ===========================================================================
   release:
-    needs: [build-macos, build-windows, build-linux]
+    needs: [prepare, build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write # Important: allows the action to write and create releases
@@ -290,13 +331,13 @@ jobs:
           echo "=== Compiled Release Assets ==="
           ls -la release-assets/
 
-      - name: Create GitHub Draft Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           prerelease: false
-          name: Release ${{ github.ref_name }}
-          tag_name: ${{ github.ref }}
+          name: Release ${{ needs.prepare.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.version }}
           files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -306,7 +347,7 @@ jobs:
           if [ -n "${{ secrets.TELEGRAM_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_TO }}" ]; then
             curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
               -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
-              -d "text=🎉 All platforms have been built and Draft Release is created successfully for version ${{ github.ref_name }}! 🚀"
+              -d "text=🎉 All platforms have been built and Release ${{ needs.prepare.outputs.version }} has been created successfully! 🚀"
           else
             echo "Telegram secrets not configured, skipping notification."
           fi
