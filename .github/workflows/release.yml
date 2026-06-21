@@ -20,17 +20,23 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '>=1.23'
-          cache: true
+          cache: ${{ !env.ACT }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: ${{ !env.ACT && 'npm' || '' }}
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails v3 CLI
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+        run: |
+          if command -v wails3 >/dev/null 2>&1; then
+            echo "wails3 is already installed, skipping installation."
+          else
+            export GOMAXPROCS=2
+            go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          fi
 
       - name: Install Frontend Dependencies
         run: |
@@ -53,6 +59,16 @@ jobs:
           name: macos-artifact
           path: bin/actions-example-macos-universal.zip
 
+      - name: Send Telegram Notification
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_TO }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
+              -d "text=✅ macOS build succeeded for version ${{ github.ref_name }}!"
+          else
+            echo "Telegram secrets not configured, skipping notification."
+          fi
+
   # ===========================================================================
   # Job: Build for Windows
   # ===========================================================================
@@ -66,18 +82,24 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '>=1.23'
-          cache: true
+          cache: ${{ !env.ACT }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: ${{ !env.ACT && 'npm' || '' }}
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails v3 CLI
         shell: bash
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+        run: |
+          if command -v wails3 >/dev/null 2>&1; then
+            echo "wails3 is already installed, skipping installation."
+          else
+            export GOMAXPROCS=2
+            go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          fi
 
       - name: Install Frontend Dependencies
         run: |
@@ -86,12 +108,16 @@ jobs:
 
       - name: Build Application Binary
         run: |
-          wails3 build
+          wails3 task windows:build
 
       - name: Build NSIS Installer
+        shell: bash
         run: |
-          # Note: makensis is pre-installed on GitHub windows-latest runners
-          wails3 task package
+          if command -v makensis >/dev/null 2>&1; then
+            wails3 task package
+          else
+            echo "makensis not found, skipping installer build."
+          fi
 
       - name: List Output Files
         shell: bash
@@ -120,35 +146,52 @@ jobs:
           name: windows-artifact
           path: win-release/*
 
+      - name: Send Telegram Notification
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_TO }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
+              -d "text=✅ Windows build succeeded for version ${{ github.ref_name }}!"
+          else
+            echo "Telegram secrets not configured, skipping notification."
+          fi
+
   # ===========================================================================
   # Job: Build for Linux
   # ===========================================================================
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install GTK3 and WebKit2Gtk Dependencies
+      - name: Install GTK4 and WebKitGTK 6.0 Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev build-essential pkg-config
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '>=1.23'
-          cache: true
+          cache: ${{ !env.ACT }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: ${{ !env.ACT && 'npm' || '' }}
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails v3 CLI
-        run: go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+        run: |
+          if command -v wails3 >/dev/null 2>&1; then
+            echo "wails3 is already installed, skipping installation."
+          else
+            export GOMAXPROCS=2
+            go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          fi
 
       - name: Install Frontend Dependencies
         run: |
@@ -162,8 +205,8 @@ jobs:
       - name: Generate DEB and RPM Packages
         run: |
           # Use internal nfpm tool inside Wails v3 to build deb/rpm packages
-          wails3 task generate:deb
-          wails3 task generate:rpm
+          wails3 task linux:generate:deb
+          wails3 task linux:generate:rpm
 
       - name: Compress Linux Binary
         run: |
@@ -185,6 +228,16 @@ jobs:
         with:
           name: linux-artifact
           path: linux-release/*
+
+      - name: Send Telegram Notification
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_TO }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
+              -d "text=✅ Linux build succeeded for version ${{ github.ref_name }}!"
+          else
+            echo "Telegram secrets not configured, skipping notification."
+          fi
 
   # ===========================================================================
   # Job: Create Draft Release and Upload All Assets
@@ -234,3 +287,13 @@ jobs:
           files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Final Telegram Notification
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_TO }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_TO }}" \
+              -d "text=🎉 All platforms have been built and Draft Release is created successfully for version ${{ github.ref_name }}! 🚀"
+          else
+            echo "Telegram secrets not configured, skipping notification."
+          fi
